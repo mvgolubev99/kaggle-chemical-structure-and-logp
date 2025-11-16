@@ -246,7 +246,7 @@ class ExperimentSearchCV:
             search_type =        self.cfg["search"].get("search_type", "grid"),
             param_space =        self.cfg["search"].get("param_space"),
             scoring =            self.cfg["search"].get("scoring","neg_root_mean_squared_error"),
-            n_trials =           self.cfg["search"].get("n_trails", 2),
+            n_trials =           self.cfg["search"].get("n_trials", 2),
             cv_splits =          self.cfg["search"].get("cv_splits", 5),
             refit =              self.cfg["search"].get("refit", True),
             seed =               self.cfg["search"].get("seed", 42),

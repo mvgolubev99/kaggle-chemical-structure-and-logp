@@ -1,4 +1,4 @@
-experiment_name: tpe_xgb_maccs_n_est_lr
+experiment_name: tpe_xgb_maccs
 
 data_path: ./data/logP_dataset.csv
 split_info_path: ./data/split_info.json
@@ -36,11 +36,39 @@ search:
       low: 0.01
       high: 0.3
       log: True
+    regressor__model__max_depth:
+        type: int
+        low: 3
+        high: 10
+    regressor__model__min_child_weight:
+      type: int
+      low: 2
+      high: 20
+    regressor__model__subsample:
+      type: float
+      low: 0.4
+      high: 0.9
+    regressor__model__colsample_by_tree:
+      type: float
+      low: 0.4
+      high: 0.9
+    regressor__model__gamma:
+      type: float
+      low: 0
+      high: 1
+    regressor__model__reg_alpha:
+      type: float
+      low: 0
+      high: 5
+    regressor__model__reg_lambda:
+      type: float
+      low: 0
+      high: 10
   scoring: "neg_root_mean_squared_error"    # by default
-  n_trials: 64                              
+  n_trials: 96                              
   cv_splits: 5                              # by default
   refit: true                               # by default
   seed: 42                                  # by default
-  verbose: 0                                # by default
+  verbose: 0
   experiment_name: "unnamed_experiment"     # by default, but forced to use "experiemnt_name" value here
   direction: "minimize"                     # by default

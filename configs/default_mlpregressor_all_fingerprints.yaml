@@ -1,0 +1,43 @@
+experiment_name: default_mlpregressor_all_fingerprints
+
+data_path: ./data/logP_dataset.csv
+split_info_path: ./data/split_info.json
+
+results:
+  output_path: ./results
+  metric: sklearn.metrics.root_mean_squared_error
+  save_search_cv_results: true
+  save_best_val_results: true
+  bootstrap_on_val: true
+  display: true
+
+# kwargs for PipelineConstructor
+pipeline:
+  regressor__model: sklearn.neural_network.MLPRegressor
+  regressor__model__kwargs:
+    random_state: 42
+  regressor__fp_transform__name: MorganFingerprint_2048 # None by default, either name or path should specified
+  regressor__fp_transform__base_dir: ./data     # by default
+  regressor__fp_transform__path: null           # by default
+  regressor__fp_transform__cash_fp: true        # by default
+
+# kwargs for OptunaSearchCV
+search:
+  search_type: grid                  # "grid", "random", "tpe"
+  param_space:                      # should be specified
+    regressor__fp_transform__name:     # list for categorical parameter 
+      - MorganFingerprint_2048
+      - FeaturesMorganFingerprint_2048
+      - MACCSKeysFingerprint_167
+      - RDKitFingerprint_2048
+      - AtomPairFingerprint_2048
+      - TopologicalTorsionFingerprint_2048
+      - AvalonFingerprint_1024
+  scoring: "neg_root_mean_squared_error"    # by default
+  n_trials: 2                               # by default, ignored if search_type is grid
+  cv_splits: 5                              # by default
+  refit: true                               # by default
+  seed: 42                                  # by default
+  verbose: 1                                # by default
+  experiment_name: unnamed_experiment     # by default, but forced to use "experiemnt_name" value here
+  direction: minimize                     # by default

@@ -111,17 +111,25 @@ def bootstrap_score(
     ):
     metric_name, scoring = _load_cls_from_module(metric)
 
+    # Get predictions for entire dataset once
+    y_pred = estimator.predict(X)
+    
     n_samples = len(y_true)
     bootstrap_scores = []
     rng = np.random.default_rng(seed=random_state)
 
     for _ in range(n_bootstrap):
+        # Sample indices and get corresponding true/pred pairs
         indices = rng.choice(n_samples, n_samples, replace=True)
-        X_bootstrap = X.iloc[indices] if hasattr(X, 'iloc') else X[indices]
-        y_bootstrap = y_true.iloc[indices] if hasattr(y_true, 'iloc') else y_true[indices]
+        
+        if hasattr(y_true, 'iloc'):
+            y_true_bootstrap = y_true.iloc[indices]
+            y_pred_bootstrap = y_pred.iloc[indices] if hasattr(y_pred, 'iloc') else y_pred[indices]
+        else:
+            y_true_bootstrap = y_true[indices]
+            y_pred_bootstrap = y_pred[indices]
 
-        y_pred = estimator.predict(X_bootstrap)
-        score = scoring(y_bootstrap, y_pred)
+        score = scoring(y_true_bootstrap, y_pred_bootstrap)
         bootstrap_scores.append(score)
 
     bootstrap_scores = np.array(bootstrap_scores)
@@ -142,7 +150,7 @@ def bootstrap_score(
     if return_bootstrap_scores:
         output_dict['bootstrap_scores'] = bootstrap_scores
     
-    return output_dict 
+    return output_dict
 
 def parity_plot(
         estimator,

@@ -1,0 +1,42 @@
+experiment_name: grid_search_all_fp_default_models
+
+search:
+  type: grid
+  scoring: neg_root_mean_squared_error
+  n_trials: null                              
+  cv_splits: 5
+  refit: true
+  seed: 42
+  verbose: 0  
+  direction: minimize
+
+results:
+  output_path: ./results
+  metric: sklearn.metrics.root_mean_squared_error
+  bootstrap_on_val: true
+  display_parity_plot: true
+  
+param_space:
+  data_representation:
+    Morgan_2048: {fp_name_or_path: MorganFingerprint_2048}
+    FeaturesMorgan_2048: {fp_name_or_path: FeaturesMorganFingerprint_2048}
+    MACCS_167: {fp_name_or_path: MACCSKeysFingerprint_167}
+    RDKit_2048: {fp_name_or_path: RDKitFingerprint_2048}
+    AtomPair_2048: {fp_name_or_path: AtomPairFingerprint_2048}
+    TopologicalTorsion_2048: {fp_name_or_path: TopologicalTorsionFingerprint_2048}
+    Avalon_1024: {fp_name_or_path: AvalonFingerprint_1024}
+  model:
+    sklearn.dummy.DummyRegressor:
+      strategy: [median]
+    sklearn.linear_model.Lasso:
+      random_state: [42]
+    sklearn.linear_model.Ridge:
+      random_state: [42]
+    xgboost.XGBRegressor:
+      random_state: [42]
+      verbosity: [0]
+    lightgbm.LGBMRegressor:
+      random_state: [42]
+      verbose: [-1]
+    sklearn.neural_network.MLPRegressor:
+      random_state: [42]  

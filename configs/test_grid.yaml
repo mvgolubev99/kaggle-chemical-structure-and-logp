@@ -1,0 +1,25 @@
+experiment_name: new_test_grid
+
+search:
+  type: grid
+  scoring: neg_root_mean_squared_error
+  n_trials: null                              
+  cv_splits: 5
+  refit: true
+  seed: 42
+  verbose: 0  
+  direction: minimize
+
+results:
+  output_path: ./results
+  metric: sklearn.metrics.root_mean_squared_error
+  bootstrap_on_val: true
+  display_parity_plot: true
+  
+param_space:
+  data_representation:
+    fp_1: {fp_name_or_path: MorganFingerprint_2048}
+    fp_2: {fp_name_or_path: FeaturesMorganFingerprint_2048}
+  model:
+    sklearn.linear_model.Lasso:
+      random_state: [41, 42]

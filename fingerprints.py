@@ -160,7 +160,6 @@ FINGERPRINT_CLASSES = {
 
 def get_fingerprint_class(name: str):
     """Returns fingerprint class by its name"""
-    name = name.lower()
     if name not in FINGERPRINT_CLASSES:
         raise ValueError(f"Unknown fingerprint type: {name}")
     return FINGERPRINT_CLASSES[name]

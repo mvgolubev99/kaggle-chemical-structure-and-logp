@@ -2,6 +2,7 @@ import random
 import importlib
 import json
 import copy
+import inspect
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -12,65 +13,6 @@ from sklearn.model_selection import train_test_split
 def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
-
-def make_splits_then_save(
-        data,
-        output_path="./data/split_info.json", 
-        val_size=None, 
-        test_size=None,
-    ):
-    data_ids =  data.index.to_numpy()
-    train_ids, test_ids = train_test_split(data_ids, random_state=42, test_size=test_size)
-    
-    # recalculate val_size
-    if isinstance(val_size, float) and isinstance(test_size, float):
-        val_size = val_size / (1 - test_size)
-    
-    train_ids, val_ids = train_test_split(train_ids, random_state=42, test_size=val_size)
-
-    split_info = {
-        'train_ids': train_ids.tolist(),
-        'val_ids': val_ids.tolist(),
-        'test_ids': test_ids.tolist(),
-    }
-
-    output_path = Path(output_path)
-    if not output_path.parent.is_dir():
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-    with open(output_path, "w") as f:
-        json.dump(split_info, f)
-
-def split_data_with_saved_indices(
-        data, 
-        split_info_path="./data/split_info.json",
-        target_column='logp',
-    ):
-    split_info_path=Path(split_info_path)
-    if not split_info_path.exists():
-        raise FileNotFoundError(f"\'{split_info_path}\' does not exist")
-    
-    with open(split_info_path, "r") as f:
-        split_info = json.load(f)
-    
-    train_ids = np.array(split_info['train_ids'])
-    val_ids = np.array(split_info['val_ids'])
-    test_ids = np.array(split_info['test_ids'])
-
-    y_train = data[target_column].iloc[train_ids].values
-    y_val = data[target_column].iloc[val_ids].values
-    y_test = data[target_column].iloc[test_ids].values
-
-    # that'll 100% guarantee that y_train, y_val and y_test are independent objects
-    y_train = copy.deepcopy(y_train)
-    y_val = copy.deepcopy(y_val)
-    y_test = copy.deepcopy(y_test)
-
-    return (
-        (train_ids, y_train), 
-        (val_ids, y_val),
-        (test_ids, y_test),
-    )
 
 def _load_cls_from_module(
         module_dot_class, # for example, 'sklearn.metrics.root_mean_squared_error'
@@ -83,6 +25,115 @@ def _load_cls_from_module(
         return class_name, cls
     else:
         return cls
+
+def _get_function_args(func):
+    """Get all parameter types from function signature"""
+    sig = inspect.signature(func)
+    
+    positional = []
+    var_positional = None
+    keyword_only = {}
+    var_keyword = None
+    
+    for name, param in sig.parameters.items():
+        if param.kind in (param.POSITIONAL_OR_KEYWORD, param.POSITIONAL_ONLY):
+            positional.append((name, param.default))
+        elif param.kind == param.VAR_POSITIONAL:
+            var_positional = name
+        elif param.kind == param.KEYWORD_ONLY:
+            keyword_only[name] = param.default
+        elif param.kind == param.VAR_KEYWORD:
+            var_keyword = name
+    
+    return positional, var_positional, keyword_only, var_keyword
+
+def _get_args_kwargs_of_func_from_cfg(func, cfg):
+    """
+    Extract positional and keyword arguments for a function from a configuration dictionary.
+    
+    This function analyzes the function's signature and matches parameters with values
+    from the configuration dictionary. It handles different parameter types including:
+    - Positional and positional-or-keyword parameters
+    - Keyword-only parameters  
+    - Variable positional parameters (*args)
+    - Variable keyword parameters (**kwargs)
+    
+    Args:
+        func (callable): The function whose signature to analyze
+        cfg (dict): Configuration dictionary containing parameter values.
+                   Keys should match parameter names from the function signature.
+                   For *args parameters, use the actual parameter name as key with a list value.
+                   For **kwargs parameters, use the actual parameter name as key with a dict value.
+    
+    Returns:
+        tuple: A tuple containing two elements:
+            - list: Positional arguments in the correct order, including *args if present
+            - dict: Keyword arguments, including **kwargs if present
+    
+    Raises:
+        AttributeError: If a required parameter (without default value) is missing from cfg
+        TypeError: If the configuration values don't match the expected parameter types
+    
+    Example:
+        >>> def example_func(a, b=2, *args, c, d=4, **kwargs):
+        ...     pass
+        >>> cfg = {
+        ...     'a': 1,
+        ...     'c': 444,
+        ...     'args': [10, 20, 30],
+        ...     'kwargs': {'x': 100, 'y': 200}
+        ... }
+        >>> args, kwargs = _get_args_kwargs_of_func_from_cfg(example_func, cfg)
+        >>> # args = [1, 2, 10, 20, 30], kwargs = {'c': 444, 'd': 4, 'x': 100, 'y': 200}
+    """
+    positional, var_positional, keyword_only, var_keyword = _get_function_args(func)
+
+    args = []
+    kwargs = {}
+    
+    # Process positional arguments
+    for param_name, default_value in positional:
+        if param_name in cfg:
+            args.append(cfg[param_name])
+        elif default_value is not inspect._empty:
+            args.append(default_value)
+        else:
+            raise AttributeError(f"{param_name} not in cfg dict while no default value exists")
+    
+    # Process *args from special 'args' key
+    if var_positional and 'args' in cfg:
+        args.extend(cfg['args'])
+    
+    # Process keyword-only arguments  
+    for param_name, default_value in keyword_only.items():
+        if param_name in cfg:
+            kwargs[param_name] = cfg[param_name]
+        elif default_value is not inspect._empty:
+            kwargs[param_name] = default_value
+        else:
+            raise AttributeError(f"{param_name} not in cfg dict while no default value exists")
+    
+    # Process **kwargs from special 'kwargs' key
+    if var_keyword and 'kwargs' in cfg:
+        kwargs.update(cfg['kwargs'])
+    
+    # Check for extra keys that are not used
+    used_keys = (
+        {name for name, _ in positional} | 
+        set(keyword_only.keys()) | 
+        ({'args'} if var_positional else set()) | 
+        ({'kwargs'} if var_keyword else set())
+    )
+    
+    extra_keys = set(cfg.keys()) - used_keys
+    if extra_keys:
+        # Option 1: Ignore silently
+        # Option 2: Warn
+        print(f"Warning: unused keys in config: {extra_keys}")
+        # Option 3: Raise error
+        # raise ValueError(f"Unexpected keys in config: {extra_keys}")
+    
+    return args, kwargs
 
 def eval_score(
         estimator,
@@ -159,6 +210,7 @@ def parity_plot(
         metric='sklearn.metrics.root_mean_squared_error',
         title=None,
         fig_save_path=None,
+        show_figure=True,
     ):
     metric_name, scoring = _load_cls_from_module(metric)
 
@@ -178,6 +230,10 @@ def parity_plot(
             f"{metric_name}={score:.6f}"
         ])
     )
+    
     if fig_save_path:
         plt.savefig(fname=fig_save_path)
-    plt.show()
+    if show_figure:
+        plt.show()
+
+    plt.close(fig=fig)

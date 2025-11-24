@@ -1,0 +1,35 @@
+experiment_name: grid_search_4_fp_MLP
+
+search:
+  type: grid
+  scoring: neg_root_mean_squared_error
+  n_trials: null                              
+  cv_splits: 5
+  refit: true
+  seed: 42
+  verbose: 0  
+  direction: minimize
+
+results:
+  output_path: ./results
+  metric: sklearn.metrics.root_mean_squared_error
+  bootstrap_on_val: true
+  display_parity_plot: true
+  
+param_space:
+  data_representation:
+    MACCS_167: {fp_name_or_path: MACCSKeysFingerprint_167}
+    RDKit_2048: {fp_name_or_path: RDKitFingerprint_2048}
+    AtomPair_2048: {fp_name_or_path: AtomPairFingerprint_2048}
+    Avalon_1024: {fp_name_or_path: AvalonFingerprint_1024}
+  model:
+    sklearn.neural_network.MLPRegressor:
+      random_state: [42]
+      early_stopping: [true]
+      validation_fraction: [0.25]
+      hidden_layer_sizes:
+        - [100]
+        - [128]
+        - [128, 32] 
+        - [64]
+        - [64, 16]

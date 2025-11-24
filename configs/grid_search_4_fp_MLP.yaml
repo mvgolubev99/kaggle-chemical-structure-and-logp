@@ -25,8 +25,6 @@ param_space:
   model:
     sklearn.neural_network.MLPRegressor:
       random_state: [42]
-      early_stopping: [true]
-      validation_fraction: [0.25]
       hidden_layer_sizes:
         - [100]
         - [128]

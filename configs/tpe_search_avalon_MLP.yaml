@@ -3,7 +3,7 @@ experiment_name: tpe_search_avalon_MLP
 search:
   type: tpe
   scoring: neg_root_mean_squared_error
-  n_trials: 128                          
+  n_trials: 32                          
   cv_splits: 5
   refit: true
   seed: 42
@@ -24,10 +24,7 @@ param_space:
       random_state: [42]
       early_stopping: [true]
       hidden_layer_sizes:
-        - [128]
-        - [128, 32] 
-        - [64]
-        - [64, 16]
+        - [128, 32]
       activation:
         - relu
         - tanh

@@ -1,0 +1,28 @@
+experiment_name: test_grid_torch_MLP
+
+search:
+  type: grid
+  scoring: neg_root_mean_squared_error
+  bootstrap_without_cv: true
+  n_trials: 2                              
+  cv_splits: 1
+  refit: true
+  seed: 42
+  verbose: 0  
+  direction: minimize
+
+results:
+  output_path: ./results
+  metric: sklearn.metrics.root_mean_squared_error
+  bootstrap_on_val: true
+  display_parity_plot: true
+  
+param_space:
+  data_representation:
+    fp_1: {fp_name_or_path: AvalonFingerprint_1024}
+  model:
+    torch_models.FastPLMLPRegressor:
+      random_state: [42]
+      hidden_layer_sizes:
+        - [100]
+        - [128, 32]

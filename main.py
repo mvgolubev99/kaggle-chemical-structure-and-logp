@@ -5,8 +5,7 @@ set_seed(42)
 # imports
 import argparse
 
-from experiment_utils import _load_config
-from experiments import ExperimentOptunaSearchCV, ExperimentGridSearchCV
+from experiments import run_hp_search_experiment
 
 def main():
     parser = argparse.ArgumentParser(description="description: run Optuna Search CV using .yaml config")
@@ -18,17 +17,8 @@ def main():
     )
     args = parser.parse_args()
     config_path = args.config
-    cfg = _load_config(config_path)
-    
-    print(f"\nrunning experiment with config: {config_path}\n")
 
-    if cfg["search"].get("type") == "tpe":
-        exp = ExperimentOptunaSearchCV(cfg)
-        exp.run()
-    
-    elif cfg["search"].get("type") == "grid":
-        exp = ExperimentGridSearchCV(cfg)
-        exp.run()
+    exp = run_hp_search_experiment(config_path)
 
 if __name__=='__main__':
     main()

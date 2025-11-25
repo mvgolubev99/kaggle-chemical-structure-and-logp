@@ -7,7 +7,24 @@ from optuna.samplers import GridSampler, RandomSampler, TPESampler
 
 import experiment_utils
 
-class ExperimentOptunaSearchCV:
+def run_hp_search_experiment(config_path):
+    cfg = experiment_utils._load_config(config_path)
+    
+    print(f"\nrunning experiment with config: {config_path}\n")
+
+    if cfg["search"].get("type") == "tpe":
+        exp = ExperimentOptunaSearch(cfg)
+    
+    elif cfg["search"].get("type") == "grid":
+        exp = ExperimentGridSearch(cfg)
+    else:
+        return None
+    
+    exp.run()
+    return exp
+    
+
+class ExperimentOptunaSearch:
     def __init__(self, cfg: str | Path | dict):
         self.cfg = experiment_utils._load_config(cfg)
         experiment_utils._validate_config(self.cfg)
@@ -43,7 +60,7 @@ class ExperimentOptunaSearchCV:
             self.results = experiment_utils._manage_results(self._study, self.cfg)
     
 
-class ExperimentGridSearchCV(ExperimentOptunaSearchCV):
+class ExperimentGridSearch(ExperimentOptunaSearch):
     def __init__(self, cfg):
         super().__init__(cfg)        
         self._all_configs = experiment_utils._flatten_conditional_param_space(self.cfg)

@@ -21,7 +21,7 @@ param_space:
   data_representation:
     fp_1: {fp_name_or_path: AvalonFingerprint_1024}
   model:
-    models.TFMLPRegressor:
+    models.OptimizedTFMLPRegressor:
       random_state: [42]
       hidden_layer_sizes:
         - [100]

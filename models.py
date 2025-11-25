@@ -1,5 +1,5 @@
 """
-TensorFlow-based MLP Regressor with scikit-learn compatibility and GPU detection.
+TensorFlow-based MLP Regressor with scikit-learn compatibility and retracing fixes.
 """
 
 import tensorflow as tf
@@ -12,8 +12,10 @@ class TFMLPRegressor(BaseEstimator, RegressorMixin):
     """
     A Multi-Layer Perceptron regressor implemented in TensorFlow with scikit-learn API compatibility.
     
-    This wrapper automatically detects and uses available GPUs, with fallback to CPU.
-    For optimal GPU performance on local machines, ensure proper CUDA toolkit installation.
+    This implementation minimizes tf.function retracing by:
+    - Building the model once and reusing it
+    - Using fixed batch sizes and input signatures
+    - Avoiding dynamic device context switching
     
     Parameters
     ----------
@@ -21,21 +23,21 @@ class TFMLPRegressor(BaseEstimator, RegressorMixin):
         The number of neurons in each hidden layer.
         
     activation : str, default='relu'
-        Activation function for hidden layers. Options: 'relu', 'tanh', 'sigmoid', etc.
+        Activation function for hidden layers.
         
     learning_rate : float, default=0.001
         Learning rate for the Adam optimizer.
         
-    epochs : int, default=50  # Reduced for faster experimentation
+    epochs : int, default=50
         Number of training epochs.
         
-    batch_size : int, default=256  # Increased for better GPU utilization
-        Batch size for training.
+    batch_size : int, default=256
+        Batch size for training and prediction. Must be fixed to avoid retracing.
         
     validation_split : float, default=0.1
         Fraction of training data to use for validation.
         
-    early_stopping : bool, default=True  # Enabled by default for better generalization
+    early_stopping : bool, default=True
         Whether to use early stopping during training.
         
     patience : int, default=10
@@ -45,15 +47,12 @@ class TFMLPRegressor(BaseEstimator, RegressorMixin):
         Random seed for reproducibility.
         
     verbose : int, default=0
-        Verbosity mode (0 = silent, 1 = progress bar, 2 = one line per epoch).
-        
-    use_gpu : bool, default=None
-        Force GPU usage if available. If None, uses automatic detection.
+        Verbosity mode.
     """
     
     def __init__(self, hidden_layer_sizes=(100,), activation='relu', learning_rate=0.001,
                  epochs=50, batch_size=256, validation_split=0.1, early_stopping=True,
-                 patience=10, random_state=42, verbose=0, use_gpu=None):
+                 patience=10, random_state=42, verbose=0):
         self.hidden_layer_sizes = hidden_layer_sizes
         self.activation = activation
         self.learning_rate = learning_rate
@@ -64,68 +63,50 @@ class TFMLPRegressor(BaseEstimator, RegressorMixin):
         self.patience = patience
         self.random_state = random_state
         self.verbose = verbose
-        self.use_gpu = use_gpu
         
-        # Set random seeds for reproducibility
+        # Set random seeds
         tf.random.set_seed(self.random_state)
         np.random.seed(self.random_state)
         
-        # GPU configuration
-        self._configure_gpu()
-    
-    def _configure_gpu(self):
-        """Configure GPU settings for optimal performance."""
-        gpus = tf.config.list_physical_devices('GPU')
-        
-        if gpus and (self.use_gpu is not False):
-            try:
-                # Enable memory growth to avoid allocating all GPU memory at once
-                for gpu in gpus:
-                    tf.config.experimental.set_memory_growth(gpu, True)
-                print(f"GPU available: Using {len(gpus)} GPU(s)")
-                self.device_ = '/GPU:0'
-            except RuntimeError as e:
-                print(f"GPU configuration failed: {e}. Falling back to CPU.")
-                self.device_ = '/CPU:0'
-        else:
-            print("Using CPU for computation")
-            self.device_ = '/CPU:0'
+        # Initialize model as None - will be built on first fit
+        self.model_ = None
+        self.n_features_in_ = None
+        self._is_fitted = False
     
     def _build_model(self, n_features):
-        """Build the TensorFlow MLP model architecture."""
-        with tf.device(self.device_):
-            model = tf.keras.Sequential()
-            
-            # Input layer
-            model.add(tf.keras.layers.Input(shape=(n_features,)))
-            
-            # Hidden layers with batch normalization for faster convergence
-            for i, units in enumerate(self.hidden_layer_sizes):
-                model.add(tf.keras.layers.Dense(
-                    units, 
-                    activation=self.activation,
-                    kernel_initializer='he_normal'  # Better for ReLU
-                ))
-                # Add batch normalization for faster training
-                model.add(tf.keras.layers.BatchNormalization())
-                model.add(tf.keras.layers.Dropout(0.1))  # Small dropout for regularization
-            
-            # Output layer (linear activation for regression)
-            model.add(tf.keras.layers.Dense(1, activation='linear'))
-            
-            # Compile model with optimized settings
-            model.compile(
-                optimizer=tf.keras.optimizers.Adam(
-                    learning_rate=self.learning_rate,
-                    beta_1=0.9,
-                    beta_2=0.999,
-                    epsilon=1e-07
-                ),
-                loss='mse',
-                metrics=['mae']
-            )
-            
-            return model
+        """Build the TensorFlow MLP model architecture once."""
+        model = tf.keras.Sequential()
+        
+        # Input layer with explicit input shape
+        model.add(tf.keras.layers.Input(shape=(n_features,), name='input_layer'))
+        
+        # Hidden layers
+        for i, units in enumerate(self.hidden_layer_sizes):
+            model.add(tf.keras.layers.Dense(
+                units, 
+                activation=self.activation,
+                kernel_initializer='he_normal',
+                name=f'hidden_layer_{i}'
+            ))
+            model.add(tf.keras.layers.BatchNormalization(name=f'batch_norm_{i}'))
+            model.add(tf.keras.layers.Dropout(0.1, name=f'dropout_{i}'))
+        
+        # Output layer
+        model.add(tf.keras.layers.Dense(1, activation='linear', name='output_layer'))
+        
+        # Compile with fixed settings
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(
+                learning_rate=self.learning_rate,
+                beta_1=0.9,
+                beta_2=0.999,
+                epsilon=1e-07
+            ),
+            loss='mse',
+            metrics=['mae']
+        )
+        
+        return model
     
     def fit(self, X, y):
         """
@@ -147,12 +128,15 @@ class TFMLPRegressor(BaseEstimator, RegressorMixin):
         # Input validation
         X, y = check_X_y(X, y, y_numeric=True, multi_output=False)
         
-        # Store information about the data
+        # Store data information
         self.n_features_in_ = X.shape[1]
-        self.n_samples_ = X.shape[0]
+        
+        # Build model only once
+        if self.model_ is None:
+            self.model_ = self._build_model(self.n_features_in_)
         
         # Adjust batch size if dataset is too small
-        effective_batch_size = min(self.batch_size, self.n_samples_)
+        effective_batch_size = min(self.batch_size, X.shape[0])
         
         # Build callbacks
         callbacks = []
@@ -165,18 +149,15 @@ class TFMLPRegressor(BaseEstimator, RegressorMixin):
             )
             callbacks.append(early_stop)
         
-        # Reduce learning rate on plateau for better convergence
+        # Reduce learning rate on plateau
         reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
             monitor='val_loss',
             factor=0.5,
-            patience=self.patience // 2,
+            patience=max(1, self.patience // 2),
             min_lr=1e-6,
             verbose=self.verbose
         )
         callbacks.append(reduce_lr)
-        
-        # Build and train model
-        self.model_ = self._build_model(self.n_features_in_)
         
         # Train the model
         self.history_ = self.model_.fit(
@@ -189,11 +170,12 @@ class TFMLPRegressor(BaseEstimator, RegressorMixin):
             shuffle=True
         )
         
+        self._is_fitted = True
         return self
     
     def predict(self, X):
         """
-        Predict using the trained MLP model.
+        Predict using the trained MLP model with fixed batch size to avoid retracing.
         
         Parameters
         ----------
@@ -211,12 +193,41 @@ class TFMLPRegressor(BaseEstimator, RegressorMixin):
         # Input validation
         X = check_array(X)
         
-        # Make predictions
-        with tf.device(self.device_):
-            y_pred = self.model_.predict(X, verbose=0, batch_size=self.batch_size)
+        # Use fixed batch size for prediction to avoid retracing
+        # If dataset is small, use full dataset as one batch
+        if X.shape[0] <= self.batch_size:
+            predict_batch_size = X.shape[0]
+        else:
+            predict_batch_size = self.batch_size
         
-        # Flatten to 1D array for compatibility with sklearn
+        # Make predictions with fixed batch size
+        y_pred = self.model_.predict(
+            X, 
+            batch_size=predict_batch_size,
+            verbose=0
+        )
+        
         return y_pred.flatten()
+    
+    def _strided_predict(self, X, chunk_size=1000):
+        """
+        Alternative prediction method for large datasets that processes data in chunks
+        to avoid memory issues while maintaining performance.
+        """
+        check_is_fitted(self, 'model_')
+        X = check_array(X)
+        
+        predictions = []
+        for i in range(0, len(X), chunk_size):
+            chunk = X[i:i + chunk_size]
+            chunk_pred = self.model_.predict(
+                chunk, 
+                batch_size=min(chunk_size, self.batch_size),
+                verbose=0
+            )
+            predictions.append(chunk_pred.flatten())
+        
+        return np.concatenate(predictions)
     
     def get_params(self, deep=True):
         """Get parameters for this estimator."""
@@ -230,37 +241,69 @@ class TFMLPRegressor(BaseEstimator, RegressorMixin):
             'early_stopping': self.early_stopping,
             'patience': self.patience,
             'random_state': self.random_state,
-            'verbose': self.verbose,
-            'use_gpu': self.use_gpu
+            'verbose': self.verbose
         }
     
     def set_params(self, **parameters):
         """Set the parameters of this estimator."""
         for parameter, value in parameters.items():
             setattr(self, parameter, value)
+        
+        # If critical parameters change, we may need to rebuild the model
+        if any(param in parameters for param in ['hidden_layer_sizes', 'activation', 'learning_rate']):
+            self.model_ = None
+            self._is_fitted = False
+            
         return self
 
 
-# Simple CPU-only version as fallback
-class SimpleTFMLPRegressor(TFMLPRegressor):
+# Optimized version for hyperparameter search
+class OptimizedTFMLPRegressor(TFMLPRegressor):
     """
-    Simplified version that forces CPU usage and uses smaller default batch size.
-    Better for small datasets and when GPU setup is problematic.
+    Optimized version specifically for hyperparameter search with reduced retracing.
+    Uses simpler architecture and fixed configurations.
     """
     
     def __init__(self, hidden_layer_sizes=(100,), activation='relu', learning_rate=0.001,
-                 epochs=50, batch_size=128, validation_split=0.1, early_stopping=True,
-                 patience=10, random_state=42, verbose=0):
+                 epochs=30, batch_size=512, validation_split=0.1, early_stopping=True,
+                 patience=5, random_state=42, verbose=0):
         super().__init__(
             hidden_layer_sizes=hidden_layer_sizes,
             activation=activation,
             learning_rate=learning_rate,
             epochs=epochs,
-            batch_size=batch_size,
+            batch_size=batch_size,  # Larger default for better performance
             validation_split=validation_split,
             early_stopping=early_stopping,
             patience=patience,
             random_state=random_state,
-            verbose=verbose,
-            use_gpu=False  # Force CPU
+            verbose=verbose
         )
+    
+    def _build_model(self, n_features):
+        """Simpler model without batch normalization for faster execution."""
+        model = tf.keras.Sequential()
+        
+        # Input layer
+        model.add(tf.keras.layers.Input(shape=(n_features,)))
+        
+        # Hidden layers (simpler without batch norm)
+        for i, units in enumerate(self.hidden_layer_sizes):
+            model.add(tf.keras.layers.Dense(
+                units, 
+                activation=self.activation,
+                kernel_initializer='he_normal'
+            ))
+            # Remove batch normalization and dropout for speed
+            # model.add(tf.keras.layers.Dropout(0.1))
+        
+        # Output layer
+        model.add(tf.keras.layers.Dense(1, activation='linear'))
+        
+        # Compile
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=self.learning_rate),
+            loss='mse'
+        )
+        
+        return model

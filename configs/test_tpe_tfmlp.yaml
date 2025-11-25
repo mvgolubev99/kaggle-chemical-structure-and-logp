@@ -1,0 +1,32 @@
+experiment_name: test_tpe_tfmlp.yaml
+
+search:
+  type: tpe
+  scoring: neg_root_mean_squared_error
+  n_trials: 2                              
+  cv_splits: 5
+  refit: true
+  seed: 42
+  verbose: 0  
+  direction: minimize
+
+results:
+  output_path: ./results
+  metric: sklearn.metrics.root_mean_squared_error
+  bootstrap_on_val: true
+  display_parity_plot: true
+  
+param_space:
+  data_representation:
+    fp_1: {fp_name_or_path: AvalonFingerprint_1024}
+  model:
+    models.TFMLPRegressor:
+      random_state: [42]
+      # epochs: [2]
+      hidden_layer_sizes:
+        - [128, 32]
+      learning_rate:
+        type: float
+        low: 0.001
+        high: 0.1
+        log: true

@@ -19,11 +19,28 @@ class ExperimentOptunaSearchCV:
         return experiment_utils._get_objective_for_conditional_param_space(self.cfg)
     
     def run(self):
-        objective = self._get_objective()
-        sampler = self._get_sampler()
-        self._study = experiment_utils._run_optuna(self.cfg, objective, sampler)
-        self.results = experiment_utils._manage_results(self._study, self.cfg)
-        return self
+        with warnings.catch_warnings():
+            # --- ignore useless warnings ---
+            # Optuna throws a warning when dictionary is passed as
+            # a choice for trial parameter, but this is the only way to
+            # run gridsearch (over all possible cominations) with optuna on a conditional param space.
+            # however, these multiple dicts are not really a big problem as they're just a shallow copy
+            warnings.filterwarnings(
+                "ignore",
+                message="Choices for a categorical distribution should be a tuple"
+            )
+            # lgbm creates column names for features
+            # even though no arrays or dataframes are passed as arguments to .fit() method
+            # and then throws a warning about X not having feature names
+            warnings.filterwarnings(
+                "ignore",
+                message=r"X does not have valid feature names.*"
+            )
+
+            objective = self._get_objective()
+            sampler = self._get_sampler()
+            self._study = experiment_utils._run_optuna(self.cfg, objective, sampler)
+            self.results = experiment_utils._manage_results(self._study, self.cfg)
     
 
 class ExperimentGridSearchCV(ExperimentOptunaSearchCV):
@@ -39,18 +56,6 @@ class ExperimentGridSearchCV(ExperimentOptunaSearchCV):
             trial, cfg, all_configs=self._all_configs)
         return experiment_utils._get_objective_for_conditional_param_space(
             self.cfg, params_sampler=params_sampler)
-
-    def run(self):
-        # Optuna throws a warning when dictionary is passed as
-        # a choice for trial parameter, but this is the only way to
-        # run gridsearch (over all possible cominations) with optuna on a conditional param space.
-        # however, these multiple dicts are not really a big problem as they're just a shallow copy
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message="Choices for a categorical distribution should be a tuple"
-            )
-            return super().run()
         
 
 

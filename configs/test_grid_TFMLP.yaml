@@ -1,10 +1,11 @@
-experiment_name: test_tpe_tfmlp.yaml
+experiment_name: test_grid_TFMLP
 
 search:
-  type: tpe
+  type: grid
   scoring: neg_root_mean_squared_error
+  bootstrap_without_cv: true
   n_trials: 2                              
-  cv_splits: 5
+  cv_splits: 1
   refit: true
   seed: 42
   verbose: 0  
@@ -22,11 +23,6 @@ param_space:
   model:
     models.TFMLPRegressor:
       random_state: [42]
-      # epochs: [2]
       hidden_layer_sizes:
+        - [100]
         - [128, 32]
-      learning_rate:
-        type: float
-        low: 0.001
-        high: 0.1
-        log: true

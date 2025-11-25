@@ -7,7 +7,7 @@ from typing import Tuple, Dict, Any, List, Callable
 import numpy as np
 import pandas as pd
 import optuna
-from sklearn.model_selection import cross_val_score, KFold
+from sklearn.model_selection import cross_val_score, KFold, train_test_split
 from sklearn.compose import TransformedTargetRegressor
 
 import utils
@@ -341,21 +341,49 @@ def _get_objective_for_conditional_param_space(
             model=params["model"],
             model_kwargs=params["model_kwargs"],
         )
-        
-        cv = KFold(
-            n_splits=cfg["search"].get("cv_splits", 5),
-            shuffle=True,
-            random_state=cfg["search"].get("seed", 42)
-        )
 
-        scores = cross_val_score(
-            estimator=model, 
-            X=X_train, 
-            y=y_train, 
-            cv=cv, 
-            scoring=cfg["search"].get("scoring", "neg_root_mean_squared_error"),
-        )
-        return -np.mean(scores)  # minimize negative metric
+        cv_splits = cfg["search"].get("cv_splits", 5)
+        if cv_splits >= 2:
+            cv = KFold(
+                n_splits=cfg["search"].get("cv_splits", 5),
+                shuffle=True,
+                random_state=cfg["search"].get("seed", 42)
+            )
+
+            scores = cross_val_score(
+                estimator=model, 
+                X=X_train, 
+                y=y_train, 
+                cv=cv, 
+                scoring=cfg["search"].get("scoring", "neg_root_mean_squared_error"),
+            )
+            return -np.mean(scores)  # minimize negative metric
+        
+        else:
+            X_train_, X_val_, y_train_, y_val_ = train_test_split(
+                X_train, y_train,
+                random_state=42,
+                shuffle=True,
+            )
+            model.fit(X=X_train_, y=y_train_)
+            
+            if cfg["search"].get("bootstrap_without_cv"):
+                bootstrap_mean_score = utils.bootstrap_score(
+                    estimator=model,
+                    X=X_val_,
+                    y_true=y_val_,
+                    metric=cfg["results"].get("metric", "sklearn.metrics.root_mean_squared_error")
+                ).get("score_mean")
+                return bootstrap_mean_score
+            else:
+                score = utils.eval_score(
+                    estimator=model,
+                    X=X_val_,
+                    y_true=y_val_,
+                    metric=cfg["results"].get("metric", "sklearn.metrics.root_mean_squared_error")
+                ).get("score")
+                return score
+                
     return objective
 
 def _run_optuna(

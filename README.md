@@ -1,6 +1,6 @@
 ### **README.md (AI generated for now)**
 
-```markdown
+
 # Molecular LogP Prediction and Genetic Optimization Framework
 
 This project provides a complete pipeline for:
@@ -32,7 +32,7 @@ The goal is to create a practical and educational pipeline for QSAR-style molecu
 
 ## Project Structure
 
-```
+
 
 .
 ├── data/                           ← dataset and split files
